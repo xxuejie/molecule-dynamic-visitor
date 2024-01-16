@@ -14,13 +14,20 @@
  * * Only bech32m variant is supported
  * * A single header is used for the whole implementation
  *
- * Note that different from typical convention in C, this library returns
- * 1 as success, and 0 as error. This convention is preserved both in the
- * callback functions, and in the APIs.
+ * Note that the original code returns 1 as success, and 0 as error. We have
+ * flipped this behavior to suit better with other libraries included here.
  */
 
 #define _BECH32M_BUF_LEN 32
 
+/*
+ * In normal cases, an inputter fills buf with data, and length with correct
+ * length. Note that length both provides the source buffer length, and also
+ * conveys the returned written length. 0 shall be returned in success.
+ *
+ * In case the inputter does not have any data, inputter shall set length as
+ * 0, then return 0 as the return code.
+ */
 typedef int (*bech32m_inputter_t)(uint8_t *buf, size_t *length, void *context);
 typedef int (*bech32m_outputter_t)(const uint8_t *data, size_t length,
                                    void *context);
@@ -42,7 +49,7 @@ int bech32m_encode(const char *hrp, bech32m_inputter_t inputter,
   while (hrp[i] != 0) {
     int ch = hrp[i];
     if (ch < 33 || ch > 126) {
-      return 0;
+      return 1;
     }
 
     if (ch >= 'A' && ch <= 'Z') return 0;
@@ -52,27 +59,27 @@ int bech32m_encode(const char *hrp, bech32m_inputter_t inputter,
   chk = _bech32m_polymod_step(chk);
   while (*hrp != 0) {
     chk = _bech32m_polymod_step(chk) ^ (*hrp & 0x1f);
-    if (!outputter((const uint8_t *)hrp, 1, outputter_context)) {
-      return 0;
+    if (outputter((const uint8_t *)hrp, 1, outputter_context)) {
+      return 2;
     }
     hrp++;
   }
-  if (!outputter((const uint8_t *)"1", 1, outputter_context)) {
-    return 0;
+  if (outputter((const uint8_t *)"1", 1, outputter_context)) {
+    return 3;
   }
   char data[_BECH32M_BUF_LEN];
   size_t data_len;
   do {
     data_len = _BECH32M_BUF_LEN;
-    if (!inputter((uint8_t *)data, &data_len, inputter_context)) {
-      return 0;
+    if (inputter((uint8_t *)data, &data_len, inputter_context)) {
+      return 4;
     }
     for (i = 0; i < data_len; ++i) {
       if (data[i] >> 5) return 0;
       chk = _bech32m_polymod_step(chk) ^ (data[i]);
       char ch = charset[(size_t)data[i]];
-      if (!outputter((const uint8_t *)&ch, 1, outputter_context)) {
-        return 0;
+      if (outputter((const uint8_t *)&ch, 1, outputter_context)) {
+        return 5;
       }
     }
   } while (data_len > 0);
@@ -82,11 +89,11 @@ int bech32m_encode(const char *hrp, bech32m_inputter_t inputter,
   chk ^= 0x2bc830a3;
   for (i = 0; i < 6; ++i) {
     char ch = charset[(chk >> ((5 - i) * 5)) & 0x1f];
-    if (!outputter((const uint8_t *)&ch, 1, outputter_context)) {
-      return 0;
+    if (outputter((const uint8_t *)&ch, 1, outputter_context)) {
+      return 6;
     }
   }
-  return 1;
+  return 0;
 }
 
 typedef struct {
@@ -114,7 +121,7 @@ int bech32m_raw_to_5bits_inputter(uint8_t *buf, size_t *length, void *context) {
       (bech32m_raw_to_5bits_inputter_context *)context;
 
   if (*length < 4) {
-    return 0;
+    return 1;
   }
   size_t wrote = 0;
   if (!c->end) {
@@ -124,16 +131,16 @@ int bech32m_raw_to_5bits_inputter(uint8_t *buf, size_t *length, void *context) {
     }
     uint8_t input_buf[_BECH32M_BUF_LEN];
 
-    if (!c->raw_inputter(input_buf, &input_buf_length,
-                         c->raw_inputter_context)) {
-      return 0;
+    if (c->raw_inputter(input_buf, &input_buf_length,
+                        c->raw_inputter_context)) {
+      return 2;
     }
     c->end = (input_buf_length == 0);
 
     for (size_t i = 0; i < input_buf_length; i++) {
       if (c->buffer_bits >= 5) {
         if (wrote >= *length) {
-          return 0;
+          return 3;
         }
         buf[wrote++] = (c->buffer & 0b11111000) >> 3;
         c->buffer <<= 5;
@@ -144,7 +151,7 @@ int bech32m_raw_to_5bits_inputter(uint8_t *buf, size_t *length, void *context) {
       uint8_t from_byte = input_buf[i] >> (3 + c->buffer_bits);
 
       if (wrote >= *length) {
-        return 0;
+        return 4;
       }
       buf[wrote++] = from_buffer | from_byte;
       c->buffer = input_buf[i] << (5 - c->buffer_bits);
@@ -165,7 +172,7 @@ int bech32m_raw_to_5bits_inputter(uint8_t *buf, size_t *length, void *context) {
   }
 
   *length = wrote;
-  return 1;
+  return 0;
 }
 
 #endif /* BECH32M_H */

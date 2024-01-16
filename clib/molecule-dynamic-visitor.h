@@ -327,7 +327,7 @@ int cursors_bech32m_inputter(uint8_t *buf, size_t *length, void *context) {
               "Cursor inputter got less data than requested, actual: %u, "
               "expected: %u!",
               read, available_space);
-          return 0;
+          return MDP_ERROR_MOL2_IO;
         }
         wrote += read;
         c->current_offset += read;
@@ -342,26 +342,7 @@ int cursors_bech32m_inputter(uint8_t *buf, size_t *length, void *context) {
     }
   }
   *length = wrote;
-  return 1;
-}
-
-typedef struct {
-  mdp_text_feeder_t feeder;
-  void *feeder_context;
-} cursors_bech32m_outputter_context;
-
-/* The only thing required here, is to flip the return value for bech32m */
-int cursors_bech32m_outputter(const uint8_t *buf, size_t length,
-                              void *context) {
-  cursors_bech32m_outputter_context *c =
-      (cursors_bech32m_outputter_context *)context;
-
-  int ret = c->feeder(buf, length, c->feeder_context);
-  if (ret != 0) {
-    MDP_DEBUG("Feeder error when doing bech32m encoding: %d\n", ret);
-    return 0;
-  }
-  return 1;
+  return 0;
 }
 
 mol2_data_source_t _mdp_make_memory_source(const void *memory, uint32_t size) {
@@ -501,15 +482,11 @@ int _mdp_visit_union(_mdp_inner *inner, mol2_cursor_t value,
       bech32m_initialize_raw_to_5bits_inputter(
           &inputter2, cursors_bech32m_inputter, &inputter);
 
-      cursors_bech32m_outputter_context outputter;
-      outputter.feeder = inner->context->feeder;
-      outputter.feeder_context = inner->context->feeder_context;
-
-      int ret =
-          bech32m_encode(inner->context->hrp, bech32m_raw_to_5bits_inputter,
-                         &inputter2, cursors_bech32m_outputter, &outputter);
-      if (ret == 0) {
-        MDP_DEBUG("bech32m encoding process throws an error!");
+      int ret = bech32m_encode(
+          inner->context->hrp, bech32m_raw_to_5bits_inputter, &inputter2,
+          inner->context->feeder, inner->context->feeder_context);
+      if (ret != 0) {
+        MDP_DEBUG("bech32m encoding process throws an error: %d!", ret);
         MDP_RETURN_ERROR(MDP_ERROR_BECH32M);
       }
 
