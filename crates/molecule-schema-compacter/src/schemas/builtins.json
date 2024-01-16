@@ -1,0 +1,99 @@
+{
+  "syntax_version": {
+    "version": 1
+  },
+  "namespace": "builtins",
+  "imports": [],
+  "declarations": [
+    {
+      "type": "array",
+      "name": "Uint8",
+      "item": "byte",
+      "item_count": 1
+    },
+    {
+      "type": "array",
+      "name": "Uint16",
+      "item": "byte",
+      "item_count": 2
+    },
+    {
+      "type": "array",
+      "name": "Uint32",
+      "item": "byte",
+      "item_count": 4
+    },
+    {
+      "type": "array",
+      "name": "Uint64",
+      "item": "byte",
+      "item_count": 8
+    },
+    {
+      "type": "array",
+      "name": "Uint128",
+      "item": "byte",
+      "item_count": 16
+    },
+    {
+      "type": "array",
+      "name": "Uint256",
+      "item": "byte",
+      "item_count": 32
+    },
+    {
+      "type": "array",
+      "name": "Byte32",
+      "item": "byte",
+      "item_count": 32
+    },
+    {
+      "type": "fixvec",
+      "name": "Bytes",
+      "item": "byte"
+    },
+    {
+      "type": "fixvec",
+      "name": "String",
+      "item": "byte"
+    },
+    {
+      "type": "table",
+      "name": "Script",
+      "fields": [
+        {
+          "name": "code_hash",
+          "type": "Byte32"
+        },
+        {
+          "name": "hash_type",
+          "type": "byte"
+        },
+        {
+          "name": "args",
+          "type": "Bytes"
+        }
+      ]
+    },
+    {
+      "type": "struct",
+      "name": "Capacity",
+      "fields": [
+        {
+          "name": "amount",
+          "type": "Uint64"
+        }
+      ]
+    },
+    {
+      "type": "union",
+      "name": "Address",
+      "items": [
+        {
+          "typ": "Script",
+          "id": 0
+        }
+      ]
+    }
+  ]
+}

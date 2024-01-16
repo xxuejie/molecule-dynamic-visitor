@@ -1,0 +1,68 @@
+array Uint64 [byte; 8];
+vector String <byte>;
+
+table FieldPair {
+		name: String,
+		typ: String,
+}
+vector FieldPairVec <FieldPair>;
+
+table OptionDefinition {
+		name: String,
+		item: String,
+}
+
+table UnionPair {
+		typ: String,
+		id: Uint64,
+}
+vector UnionPairVec <UnionPair>;
+
+table UnionDefinition {
+		name: String,
+		items: UnionPairVec,
+}
+
+table ArrayDefinition {
+		name: String,
+		item: String,
+		item_count: Uint64,
+}
+
+table StructDefinition {
+		name: String,
+		fields: FieldPairVec,
+}
+
+table FixvecDefinition {
+		name: String,
+		item: String,
+}
+
+table DynvecDefinition {
+		name: String,
+		item: String,
+}
+
+table TableDefinition {
+		name: String,
+		fields: FieldPairVec,
+}
+
+union Definition {
+		OptionDefinition,
+		UnionDefinition,
+		ArrayDefinition,
+		StructDefinition,
+		FixvecDefinition,
+		DynvecDefinition,
+		TableDefinition,
+}
+
+vector DefinitionVec <Definition>;
+
+table Definitions {
+		definitions: DefinitionVec,
+		top_level_type: String,
+		syntax_version: Uint64,
+}

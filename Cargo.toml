@@ -1,0 +1,7 @@
+[workspace]
+resolver = "2"
+
+members = [
+  "crates/spore-data-generator",
+  "crates/molecule-schema-compacter",
+]

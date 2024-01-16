@@ -1,0 +1,11 @@
+[package]
+name = "molecule-schema-compacter"
+description = "A tool converting molecule schema to a compact on-chain format"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4.4.16", features = ["cargo"] }
+molecule = { git = "https://github.com/xxuejie/molecule", rev = "29d8155" }
+molecule-codegen = { git = "https://github.com/xxuejie/molecule", rev = "29d8155", features = ["compiler-plugin"] }
+serde_json = "1.0.111"

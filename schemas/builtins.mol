@@ -1,0 +1,29 @@
+// All uint types introduced here use little endian encoding.
+array Uint8 [byte; 1];
+array Uint16 [byte; 2];
+array Uint32 [byte; 4];
+array Uint64 [byte; 8];
+array Uint128 [byte; 16];
+array Uint256 [byte; 32];
+
+array Byte32 [byte; 32];
+
+// Raw bytes of arbitrary data.
+vector Bytes <byte>;
+
+// UTF-8 formatted human-readable strings, 
+vector String <byte>;
+
+table Script {
+    code_hash: Byte32,
+    hash_type: byte,
+    args: Bytes,
+}
+
+struct Capacity {
+    amount: Uint64,
+}
+
+union Address {
+    Script,
+}
