@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "bech32m.h"
 #include "mol2_definitions.h"
 
 /*
@@ -18,6 +19,7 @@ typedef int (*mdp_text_feeder_t)(const uint8_t *data, size_t length,
                                  void *feeder_context);
 
 typedef struct {
+  const char *hrp;
   mol2_cursor_t schema;
   mol2_cursor_t data;
   mdp_text_feeder_t feeder;
@@ -87,6 +89,7 @@ int mdp_visit(mdp_context context);
 #define MDP_ERROR_MOL2_IO (MDP_ERROR_BASE_CODE + 2)
 #define MDP_ERROR_SCHEMA_ENCODING (MDP_ERROR_BASE_CODE + 3)
 #define MDP_ERROR_SNPRINTF (MDP_ERROR_BASE_CODE + 4)
+#define MDP_ERROR_BECH32M (MDP_ERROR_BASE_CODE + 5)
 
 /*
  * ----------------------------------------------------------------------
@@ -283,6 +286,107 @@ int _mdp_send_raw_bytes(_mdp_inner *inner, mol2_cursor_t value) {
   return inner->last_error;
 }
 
+typedef struct {
+  const mol2_cursor_t *cursors;
+  size_t cursor_count;
+
+  size_t current_cursor;
+  uint32_t current_offset;
+} cursors_bech32m_inputter_context;
+
+void cursors_bech32m_inputter_context_initialize(
+    cursors_bech32m_inputter_context *context, const mol2_cursor_t *cursors,
+    size_t cursor_count) {
+  context->cursors = cursors;
+  context->cursor_count = cursor_count;
+  context->current_cursor = 0;
+  context->current_offset = 0;
+}
+
+int cursors_bech32m_inputter(uint8_t *buf, size_t *length, void *context) {
+  cursors_bech32m_inputter_context *c =
+      (cursors_bech32m_inputter_context *)context;
+
+  size_t wrote = 0;
+  while (wrote < *length) {
+    if (c->current_cursor < c->cursor_count) {
+      if (c->current_offset < c->cursors[c->current_cursor].size) {
+        uint32_t available_data =
+            c->cursors[c->current_cursor].size - c->current_offset;
+        uint32_t available_space = (uint32_t)(*length - wrote);
+        if (available_space > available_data) {
+          available_space = available_data;
+        }
+        mol2_cursor_t target_cursor = c->cursors[c->current_cursor];
+        mol2_add_offset(&target_cursor, c->current_offset);
+        target_cursor.size = available_space;
+        uint32_t read =
+            mol2_read_at(&target_cursor, &buf[wrote], available_space);
+        if (read != available_space) {
+          MDP_DEBUG(
+              "Cursor inputter got less data than requested, actual: %u, "
+              "expected: %u!",
+              read, available_space);
+          return 0;
+        }
+        wrote += read;
+        c->current_offset += read;
+      } else {
+        // Switch to next cursor
+        c->current_cursor++;
+        c->current_offset = 0;
+      }
+    } else {
+      // Running out of data to use
+      break;
+    }
+  }
+  *length = wrote;
+  return 1;
+}
+
+typedef struct {
+  mdp_text_feeder_t feeder;
+  void *feeder_context;
+} cursors_bech32m_outputter_context;
+
+/* The only thing required here, is to flip the return value for bech32m */
+int cursors_bech32m_outputter(const uint8_t *buf, size_t length,
+                              void *context) {
+  cursors_bech32m_outputter_context *c =
+      (cursors_bech32m_outputter_context *)context;
+
+  int ret = c->feeder(buf, length, c->feeder_context);
+  if (ret != 0) {
+    MDP_DEBUG("Feeder error when doing bech32m encoding: %d\n", ret);
+    return 0;
+  }
+  return 1;
+}
+
+mol2_data_source_t _mdp_make_memory_source(const void *memory, uint32_t size) {
+  mol2_data_source_t s_data_source = {0};
+
+  s_data_source.read = mol2_source_memory;
+  s_data_source.total_size = size;
+  s_data_source.args[0] = (uintptr_t)memory;
+  s_data_source.args[1] = (uintptr_t)size;
+
+  s_data_source.cache_size = 0;
+  s_data_source.start_point = 0;
+  s_data_source.total_size = size;
+  s_data_source.max_cache_size = MIN_CACHE_SIZE;
+  return s_data_source;
+}
+
+mol2_cursor_t _mdp_cursor_from_source(mol2_data_source_t *source) {
+  mol2_cursor_t cur;
+  cur.offset = 0;
+  cur.size = source->total_size;
+  cur.data_source = source;
+  return cur;
+}
+
 int _mdp_visit_subtype(_mdp_inner *inner, mol2_cursor_t value,
                        mol2_cursor_t sub_type_name, mol2_num_t *consumed_size);
 
@@ -318,7 +422,6 @@ int _mdp_visit_union(_mdp_inner *inner, mol2_cursor_t value,
     return inner->last_error;
   }
 
-  // TODO: handle Address builtin type
   if (value.size < 4) {
     MDP_DEBUG(
         "Union requires at least 4 bytes for ID but the value only has length: "
@@ -335,6 +438,86 @@ int _mdp_visit_union(_mdp_inner *inner, mol2_cursor_t value,
 
   _mdp_send_indents(inner);
   _mdp_send_cursor_to_feeder(inner, t->t->name(t));
+
+  {
+    // handle Address builtin type
+    int match = 1;
+    int ret = _mdp_cursor_s_cmp(t->t->name(t), "Address", &match);
+    if (ret != 0) {
+      MDP_RETURN_ERROR(ret);
+    }
+    if (match == 0) {
+      if (union_id != 0) {
+        MDP_DEBUG("Address type only supports Script variant for now");
+        MDP_RETURN_ERROR(MDP_ERROR_MOLECULE_ENCODING);
+      }
+      // Now we can simply treat the content of the cursor as a table
+      // of 3 items.
+      mol2_cursor_t script_table_value = value;
+      mol2_add_offset(&script_table_value, 4);
+      mol2_sub_size(&script_table_value, 4);
+
+      mol2_num_t full_size = mol2_unpack_number(&script_table_value);
+      mol2_cursor_t code_hash =
+          mol2_table_slice_by_index(&script_table_value, 0);
+      if (code_hash.size != 32) {
+        MDP_DEBUG("Invalid code hash in address type!");
+        MDP_RETURN_ERROR(MDP_ERROR_MOLECULE_ENCODING);
+      }
+      mol2_cursor_t hash_type =
+          mol2_table_slice_by_index(&script_table_value, 1);
+      if (hash_type.size != 1) {
+        MDP_DEBUG("Invalid hash type in address type!");
+        MDP_RETURN_ERROR(MDP_ERROR_MOLECULE_ENCODING);
+      }
+      mol2_cursor_t args = mol2_table_slice_by_index(&script_table_value, 2);
+      if (args.size < 4) {
+        MDP_DEBUG("Invalid args in address type!");
+        MDP_RETURN_ERROR(MDP_ERROR_MOLECULE_ENCODING);
+      }
+      mol2_num_t args_length = mol2_unpack_number(&args);
+      if (args.size != args_length + 4) {
+        MDP_DEBUG("Invalid args length in address type!");
+        MDP_RETURN_ERROR(MDP_ERROR_MOLECULE_ENCODING);
+      }
+      if (code_hash.size + hash_type.size + args.size + 16 != full_size) {
+        MDP_DEBUG("Invalid address type!");
+        MDP_RETURN_ERROR(MDP_ERROR_MOLECULE_ENCODING);
+      }
+      mol2_cursor_t actual_args = args;
+      mol2_add_offset(&actual_args, 4);
+      mol2_sub_size(&actual_args, 4);
+
+      // Actual visit CKB address
+      _mdp_send_literal(inner, ": ");
+
+      mol2_data_source_t index_source = _mdp_make_memory_source("\0", 1);
+      mol2_cursor_t index_cursor = _mdp_cursor_from_source(&index_source);
+      mol2_cursor_t cursors[4] = {index_cursor, code_hash, hash_type, args};
+      cursors_bech32m_inputter_context inputter;
+      cursors_bech32m_inputter_context_initialize(&inputter, cursors, 4);
+
+      bech32m_raw_to_5bits_inputter_context inputter2;
+      bech32m_initialize_raw_to_5bits_inputter(
+          &inputter2, cursors_bech32m_inputter, &inputter);
+
+      cursors_bech32m_outputter_context outputter;
+      outputter.feeder = inner->context->feeder;
+      outputter.feeder_context = inner->context->feeder_context;
+
+      int ret =
+          bech32m_encode(inner->context->hrp, bech32m_raw_to_5bits_inputter,
+                         &inputter2, cursors_bech32m_outputter, &outputter);
+      if (ret == 0) {
+        MDP_DEBUG("bech32m encoding process throws an error!");
+        MDP_RETURN_ERROR(MDP_ERROR_BECH32M);
+      }
+
+      *consumed_size = full_size + 4;
+      return inner->last_error;
+    }
+  }
+
   _mdp_send_literal(inner, "(variant ");
   mol2_cursor_t subtype = pair.t->typ(&pair);
   _mdp_send_cursor_to_feeder(inner, subtype);

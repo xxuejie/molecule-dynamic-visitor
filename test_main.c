@@ -5,9 +5,8 @@ typedef struct {
   size_t length;
 } alloc_feeder;
 
-int feed_data(const uint8_t *data, size_t length,
-              void *feeder_context) {
-  alloc_feeder *f = (alloc_feeder *) feeder_context;
+int feed_data(const uint8_t *data, size_t length, void *feeder_context) {
+  alloc_feeder *f = (alloc_feeder *)feeder_context;
   f->data = realloc(f->data, f->length + length);
   memcpy(&f->data[f->length], data, length);
   f->length += length;
@@ -30,7 +29,7 @@ mol2_data_source_t make_data_source(const void *memory, uint32_t size) {
   return s_data_source;
 }
 
-mol2_cursor_t cursor_from_source(mol2_data_source_t* source) {
+mol2_cursor_t cursor_from_source(mol2_data_source_t *source) {
   mol2_cursor_t cur;
   cur.offset = 0;
   cur.size = source->total_size;
@@ -38,7 +37,7 @@ mol2_cursor_t cursor_from_source(mol2_data_source_t* source) {
   return cur;
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[]) {
   if (argc != 3) {
     printf("Usage: %s <schema file> <data file>\n", argv[0]);
     return 1;
@@ -74,13 +73,17 @@ int main(int argc, char* argv[]) {
   context.data = NULL;
   context.length = 0;
 
-  mol2_data_source_t schema_source = make_data_source(schema, (uint32_t) schema_size);
-  mol2_data_source_t data_source = make_data_source(data, (uint32_t) data_size);
+  mol2_data_source_t schema_source =
+      make_data_source(schema, (uint32_t)schema_size);
+  mol2_data_source_t data_source = make_data_source(data, (uint32_t)data_size);
 
   mol2_cursor_t schema_cursor = cursor_from_source(&schema_source);
   mol2_cursor_t data_cursor = cursor_from_source(&data_source);
 
   mdp_context mcontext;
+  // For a real setup, this should be a parameter depending on actual
+  // environment
+  mcontext.hrp = "ckb";
   mcontext.schema = schema_cursor;
   mcontext.data = data_cursor;
   mcontext.feeder = feed_data;
@@ -93,7 +96,7 @@ int main(int argc, char* argv[]) {
   if (ret == MDP_OK) {
     printf("Success!\n");
     if (context.data != NULL) {
-      feed_data((const uint8_t *) "\0", 1, &context);
+      feed_data((const uint8_t *)"\0", 1, &context);
       printf("Visited data:\n\n%s", context.data);
       free(context.data);
     } else {

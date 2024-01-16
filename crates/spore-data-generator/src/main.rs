@@ -4,6 +4,11 @@ use crate::schemas::spore;
 use clap::{command, Arg};
 use molecule::prelude::*;
 use rand::{rngs::StdRng, Rng, SeedableRng};
+use ckb_sdk::types::{Address, NetworkType, AddressPayload};
+use ckb_types::prelude::*;
+
+// Tweak this for a different environment
+const NETWORK: NetworkType = NetworkType::Mainnet;
 
 fn main() {
     let matches = command!()
@@ -39,6 +44,7 @@ fn main() {
                 .data_hash(random_byte32(&mut rng))
                 .build();
             println!("Mint spore id: {:#x}", mint.spore_id());
+            println!("Mint to: {}", to_address(mint.to()));
             println!("Mint data hash: {:#x}", mint.data_hash());
             mint.into()
         }
@@ -50,6 +56,8 @@ fn main() {
                 .to(random_address(&mut rng))
                 .build();
             println!("Transfer spore id: {:#x}", transfer.spore_id());
+            println!("Transfer from: {}", to_address(transfer.from()));
+            println!("Transfer to: {}", to_address(transfer.to()));
             transfer.into()
         }
         _ => {
@@ -59,11 +67,24 @@ fn main() {
                 .from(random_address(&mut rng))
                 .build();
             println!("Burn spore id: {:#x}", burn.spore_id());
+            println!("Burn from: {}", to_address(burn.from()));
             burn.into()
         }
     };
 
     std::fs::write(output_file, spore_action.as_slice()).expect("write");
+}
+
+fn to_address(a: spore::Address) -> Address {
+    let spore::AddressUnion::Script(script) = a.to_enum();
+    let hash_type: u8 = script.hash_type().into();
+    let code_hash: [u8; 32] = script.code_hash().into();
+    let payload = AddressPayload::Full {
+        hash_type: hash_type.try_into().unwrap(),
+        code_hash: code_hash.pack(),
+        args: script.args().as_bytes(),
+    };
+    Address::new(NETWORK, payload, true)
 }
 
 fn random_byte32<R: Rng>(rng: &mut R) -> spore::Byte32 {
