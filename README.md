@@ -4,7 +4,7 @@ A dynamic [molecule](https://github.com/nervosnetwork/molecule) schema visitor f
 
 ## Usage
 
-For now, you need to manually compile moleculec binary from git (no earlier than [this commit](https://github.com/nervosnetwork/molecule/commit/526745650ccb2a10d6b2e883f74e90169decfa10)), and make sure the compiled moleculec binary is in `PATH`. When molecule releases 0.8.0, this might not be needed.
+Make sure you have moleculec 0.7.5 or above installed.
 
 ```
 $ cargo build
