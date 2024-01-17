@@ -42,7 +42,7 @@
 
 typedef int (*utf8_inputter_t)(uint8_t *buf, size_t *length, void *context);
 typedef int (*utf8_outputter_t)(const uint8_t *data, size_t length,
-                                   void *context);
+                                void *context);
 
 int utf8_check(utf8_inputter_t inputter, void *inputter_context,
                utf8_outputter_t outputter, void *outputter_context) {

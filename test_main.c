@@ -1,16 +1,28 @@
 #include "clib/molecule-dynamic-visitor.h"
+#include "deps/ckb-c-stdlib/blake2b.h"
 
 typedef struct {
   uint8_t *data;
   size_t length;
 } alloc_feeder;
 
+// A simple feeder that writes to a realloc-managed memory buffer
 int feed_data(const uint8_t *data, size_t length, void *feeder_context) {
   alloc_feeder *f = (alloc_feeder *)feeder_context;
   f->data = realloc(f->data, f->length + length);
   memcpy(&f->data[f->length], data, length);
   f->length += length;
 
+  return 0;
+}
+
+// Typically, one would not want to simple keep the feeder data in CKB-VM's
+// memory, since the data might be of arbitrary length. A more likely scenario,
+// is that the output data for a feeder, is then sent to a hasher function to
+// generate a hash. Like the following implementation:
+int feed_to_blak2b(const uint8_t *data, size_t length, void *feeder_context) {
+  blake2b_state *state = (blake2b_state *)feeder_context;
+  blake2b_update(state, data, length);
   return 0;
 }
 
@@ -80,6 +92,9 @@ int main(int argc, char *argv[]) {
   mol2_cursor_t schema_cursor = cursor_from_source(&schema_source);
   mol2_cursor_t data_cursor = cursor_from_source(&data_source);
 
+  // In the first example here, we simple concatenate all output data from
+  // the visitor for printing. Note that in a real smart contract, this might
+  // never really happen.
   mdp_context mcontext;
   // For a real setup, this should be a parameter depending on actual
   // environment
@@ -89,12 +104,10 @@ int main(int argc, char *argv[]) {
   mcontext.feeder = feed_data;
   mcontext.feeder_context = &context;
 
+  printf("\n");
   int ret = mdp_visit(mcontext);
-  free(schema);
-  free(data);
-
   if (ret == MDP_OK) {
-    printf("Success!\n");
+    printf("Concatenating Visit Success!\n");
     if (context.data != NULL) {
       feed_data((const uint8_t *)"\0", 1, &context);
       printf("Visited data:\n\n%s", context.data);
@@ -106,5 +119,31 @@ int main(int argc, char *argv[]) {
     printf("Error: %d\n", ret);
   }
 
+  blake2b_state state;
+  blake2b_init(&state, 32);
+  mcontext.hrp = "ckb";
+  mcontext.schema = schema_cursor;
+  mcontext.data = data_cursor;
+  mcontext.feeder = feed_to_blak2b;
+  mcontext.feeder_context = &state;
+
+  printf("\n");
+  ret = mdp_visit(mcontext);
+  if (ret == MDP_OK) {
+    printf("Hashing Visit Success!\n");
+
+    uint8_t hash[32];
+    blake2b_final(&state, hash, 32);
+    printf("Hash: 0x");
+    for (int i = 0; i < 32; i++) {
+      printf("%02x", hash[i]);
+    }
+    printf("\n");
+  } else {
+    printf("Error: %d\n", ret);
+  }
+
+  free(schema);
+  free(data);
   return ret;
 }
