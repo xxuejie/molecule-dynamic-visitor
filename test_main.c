@@ -119,6 +119,9 @@ int main(int argc, char *argv[]) {
     printf("Error: %d\n", ret);
   }
 
+  // This is a more typical scenario we might encounter in a smart contract:
+  // the output data from visitor are then fed into a hashing function, which
+  // then calculates a hash for later signature verification
   blake2b_state state;
   blake2b_init(&state, 32);
   mcontext.hrp = "ckb";
