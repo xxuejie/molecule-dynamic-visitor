@@ -2,6 +2,7 @@
 resolver = "2"
 
 members = [
+  "crates/misc-data-generator",
   "crates/spore-data-generator",
   "crates/molecule-schema-compacter",
 ]

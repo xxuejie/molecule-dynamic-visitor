@@ -9,6 +9,7 @@
 
 #include "bech32m.h"
 #include "mol2_definitions.h"
+#include "utf8.h"
 
 /*
  * ----------------------------------------------------------------------
@@ -62,6 +63,10 @@ int mdp_visit(mdp_context context);
 
 #ifndef MDP_VSNPRINTF
 #define MDP_VSNPRINTF vsnprintf
+#endif
+
+#ifndef MDP_VALIDATE_UTF8
+#define MDP_VALIDATE_UTF8 utf8_check
 #endif
 
 /*
@@ -292,20 +297,19 @@ typedef struct {
 
   size_t current_cursor;
   uint32_t current_offset;
-} cursors_bech32m_inputter_context;
+} cursors_inputter_context;
 
-void cursors_bech32m_inputter_context_initialize(
-    cursors_bech32m_inputter_context *context, const mol2_cursor_t *cursors,
-    size_t cursor_count) {
+void cursors_inputter_context_initialize(cursors_inputter_context *context,
+                                         const mol2_cursor_t *cursors,
+                                         size_t cursor_count) {
   context->cursors = cursors;
   context->cursor_count = cursor_count;
   context->current_cursor = 0;
   context->current_offset = 0;
 }
 
-int cursors_bech32m_inputter(uint8_t *buf, size_t *length, void *context) {
-  cursors_bech32m_inputter_context *c =
-      (cursors_bech32m_inputter_context *)context;
+int cursors_inputter(uint8_t *buf, size_t *length, void *context) {
+  cursors_inputter_context *c = (cursors_inputter_context *)context;
 
   size_t wrote = 0;
   while (wrote < *length) {
@@ -475,12 +479,12 @@ int _mdp_visit_union(_mdp_inner *inner, mol2_cursor_t value,
       mol2_data_source_t index_source = _mdp_make_memory_source("\0", 1);
       mol2_cursor_t index_cursor = _mdp_cursor_from_source(&index_source);
       mol2_cursor_t cursors[4] = {index_cursor, code_hash, hash_type, args};
-      cursors_bech32m_inputter_context inputter;
-      cursors_bech32m_inputter_context_initialize(&inputter, cursors, 4);
+      cursors_inputter_context inputter;
+      cursors_inputter_context_initialize(&inputter, cursors, 4);
 
       bech32m_raw_to_5bits_inputter_context inputter2;
-      bech32m_initialize_raw_to_5bits_inputter(
-          &inputter2, cursors_bech32m_inputter, &inputter);
+      bech32m_initialize_raw_to_5bits_inputter(&inputter2, cursors_inputter,
+                                               &inputter);
 
       int ret = bech32m_encode(
           inner->context->hrp, bech32m_raw_to_5bits_inputter, &inputter2,
@@ -552,6 +556,10 @@ int _mdp_visit_array(_mdp_inner *inner, mol2_cursor_t value,
             "Byte32 must be an array of 32 bytes, but the schema differs");
         MDP_RETURN_ERROR(MDP_ERROR_SCHEMA_ENCODING);
       }
+      if (value.size < 32) {
+        MDP_DEBUG("Byte32 has invalid length %u!\n", value.size);
+        MDP_RETURN_ERROR(MDP_ERROR_MOLECULE_ENCODING);
+      }
       uint8_t data[32];
       if (mol2_read_at(&value, data, 32) != 32) {
         MDP_DEBUG("Reading 32 bytes from cursor results in error!\n");
@@ -564,6 +572,31 @@ int _mdp_visit_array(_mdp_inner *inner, mol2_cursor_t value,
       }
 
       *consumed_size = 32;
+      return inner->last_error;
+    }
+    match = 1;
+    ret = _mdp_cursor_s_cmp(t->t->name(t), "Uint64", &match);
+    if (ret != 0) {
+      MDP_RETURN_ERROR(ret);
+    }
+    if (match == 0) {
+      if (item_count != 8) {
+        MDP_DEBUG("Uint64 must be an array of 8 bytes, but the schema differs");
+        MDP_RETURN_ERROR(MDP_ERROR_SCHEMA_ENCODING);
+      }
+      if (value.size < 8) {
+        MDP_DEBUG("Uint64 has invalid length %u!\n", value.size);
+        MDP_RETURN_ERROR(MDP_ERROR_MOLECULE_ENCODING);
+      }
+      // Assuming little-endian here
+      uint64_t data;
+      if (mol2_read_at(&value, (uint8_t *)(&data), 8) != 8) {
+        MDP_DEBUG("Reading 8 bytes from cursor results in error!\n");
+        MDP_RETURN_ERROR(MDP_ERROR_MOL2_IO);
+      }
+      _mdp_send_printf(inner, ": %lu", data);
+
+      *consumed_size = 8;
       return inner->last_error;
     }
   }
@@ -694,13 +727,61 @@ int _mdp_visit_fixvec(_mdp_inner *inner, mol2_cursor_t value,
     MDP_RETURN_ERROR(MDP_ERROR_MOLECULE_ENCODING);
   }
   mol2_num_t item_count = mol2_unpack_number(&value);
+  mol2_cursor_t subtype = t->t->item(t);
 
   _mdp_send_indents(inner);
   _mdp_send_cursor_to_feeder(inner, t->t->name(t));
+
+  {
+    // Handle String builtin type
+    int match = 1;
+    int ret = _mdp_cursor_s_cmp(t->t->name(t), "String", &match);
+    if (ret != 0) {
+      MDP_RETURN_ERROR(ret);
+    }
+    if (match == 0) {
+      // String is a vector of byte
+      match = 1;
+      ret = _mdp_cursor_s_cmp(subtype, "byte", &match);
+      if (ret != 0) {
+        MDP_RETURN_ERROR(ret);
+      }
+      if (match != 0) {
+        MDP_DEBUG("String is a vector of bytes but schema differs!\n");
+        MDP_RETURN_ERROR(MDP_ERROR_SCHEMA_ENCODING);
+      }
+      if (value.size < item_count + 4) {
+        MDP_DEBUG("String of %u items has invalid length %u!\n", item_count,
+                  value.size);
+        MDP_RETURN_ERROR(MDP_ERROR_MOLECULE_ENCODING);
+      }
+
+      _mdp_send_literal(inner, ": \"");
+      mol2_cursor_t value2 = value;
+      mol2_add_offset(&value2, 4);
+      value2.size = item_count;
+
+      // Validate utf8 string, then send the utf8 bytes directly
+      mol2_cursor_t cursors[1] = {value2};
+      cursors_inputter_context inputter;
+      cursors_inputter_context_initialize(&inputter, cursors, 1);
+      ret =
+          MDP_VALIDATE_UTF8(cursors_inputter, &inputter, inner->context->feeder,
+                            inner->context->feeder_context);
+      if (ret != 0) {
+        MDP_DEBUG("UTF8 Validation error: %d", ret);
+        MDP_RETURN_ERROR(MDP_ERROR_MOLECULE_ENCODING);
+      }
+      _mdp_send_literal(inner, "\"");
+
+      *consumed_size = item_count + 4;
+      return inner->last_error;
+    }
+  }
+
   _mdp_send_printf(inner, "(fixvec, len = %u): [\n", item_count);
 
   inner->indent_levels++;
-  mol2_cursor_t subtype = t->t->item(t);
   int match = 1;
   int ret = _mdp_cursor_s_cmp(subtype, "byte", &match);
   if (ret != 0) {

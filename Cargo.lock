@@ -1325,6 +1325,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "misc-data-generator"
+version = "0.1.0"
+dependencies = [
+ "ckb-sdk",
+ "ckb-types",
+ "clap",
+ "molecule 0.7.5 (git+https://github.com/xxuejie/molecule?rev=29d8155)",
+ "rand 0.8.5",
+ "rand-utf8",
+]
+
+[[package]]
 name = "molecule"
 version = "0.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1731,6 +1743,15 @@ dependencies = [
  "libc",
  "rand_chacha 0.3.1",
  "rand_core 0.6.4",
+]
+
+[[package]]
+name = "rand-utf8"
+version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d0f2017cdc22f0f49fc0385c036847c03403fa5f95bc36e7f420e8e42446e80f"
+dependencies = [
+ "rand 0.8.5",
 ]
 
 [[package]]

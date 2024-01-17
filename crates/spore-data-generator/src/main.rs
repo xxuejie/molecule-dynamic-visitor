@@ -1,11 +1,11 @@
 mod schemas;
 
 use crate::schemas::spore;
+use ckb_sdk::types::{Address, AddressPayload, NetworkType};
+use ckb_types::prelude::Pack;
 use clap::{command, Arg};
 use molecule::prelude::*;
 use rand::{rngs::StdRng, Rng, SeedableRng};
-use ckb_sdk::types::{Address, NetworkType, AddressPayload};
-use ckb_types::prelude::*;
 
 // Tweak this for a different environment
 const NETWORK: NetworkType = NetworkType::Mainnet;
