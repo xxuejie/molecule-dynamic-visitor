@@ -3995,6 +3995,7 @@ impl ::core::fmt::Display for Misc {
         write!(f, ", {}: {}", "hash", self.hash())?;
         write!(f, ", {}: {}", "string", self.string())?;
         write!(f, ", {}: {}", "addr", self.addr())?;
+        write!(f, ", {}: {}", "var_bytes", self.var_bytes())?;
         let extra_count = self.count_extra_fields();
         if extra_count != 0 {
             write!(f, ", .. ({} fields)", extra_count)?;
@@ -4009,14 +4010,14 @@ impl ::core::default::Default for Misc {
     }
 }
 impl Misc {
-    const DEFAULT_VALUE: [u8; 121] = [
-        121, 0, 0, 0, 20, 0, 0, 0, 28, 0, 0, 0, 60, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    const DEFAULT_VALUE: [u8; 129] = [
+        129, 0, 0, 0, 24, 0, 0, 0, 32, 0, 0, 0, 64, 0, 0, 0, 68, 0, 0, 0, 125, 0, 0, 0, 0, 0, 0, 0,
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 53, 0, 0, 0, 16, 0, 0, 0, 48, 0, 0, 0, 49, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 53, 0, 0, 0, 16, 0, 0, 0, 48, 0, 0, 0, 49, 0, 0,
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     ];
-    pub const FIELD_COUNT: usize = 4;
+    pub const FIELD_COUNT: usize = 5;
     pub fn total_size(&self) -> usize {
         molecule::unpack_number(self.as_slice()) as usize
     }
@@ -4054,11 +4055,17 @@ impl Misc {
     pub fn addr(&self) -> Address {
         let slice = self.as_slice();
         let start = molecule::unpack_number(&slice[16..]) as usize;
+        let end = molecule::unpack_number(&slice[20..]) as usize;
+        Address::new_unchecked(self.0.slice(start..end))
+    }
+    pub fn var_bytes(&self) -> Bytes {
+        let slice = self.as_slice();
+        let start = molecule::unpack_number(&slice[20..]) as usize;
         if self.has_extra_fields() {
-            let end = molecule::unpack_number(&slice[20..]) as usize;
-            Address::new_unchecked(self.0.slice(start..end))
+            let end = molecule::unpack_number(&slice[24..]) as usize;
+            Bytes::new_unchecked(self.0.slice(start..end))
         } else {
-            Address::new_unchecked(self.0.slice(start..))
+            Bytes::new_unchecked(self.0.slice(start..))
         }
     }
     pub fn as_reader<'r>(&'r self) -> MiscReader<'r> {
@@ -4092,6 +4099,7 @@ impl molecule::prelude::Entity for Misc {
             .hash(self.hash())
             .string(self.string())
             .addr(self.addr())
+            .var_bytes(self.var_bytes())
     }
 }
 #[derive(Clone, Copy)]
@@ -4117,6 +4125,7 @@ impl<'r> ::core::fmt::Display for MiscReader<'r> {
         write!(f, ", {}: {}", "hash", self.hash())?;
         write!(f, ", {}: {}", "string", self.string())?;
         write!(f, ", {}: {}", "addr", self.addr())?;
+        write!(f, ", {}: {}", "var_bytes", self.var_bytes())?;
         let extra_count = self.count_extra_fields();
         if extra_count != 0 {
             write!(f, ", .. ({} fields)", extra_count)?;
@@ -4125,7 +4134,7 @@ impl<'r> ::core::fmt::Display for MiscReader<'r> {
     }
 }
 impl<'r> MiscReader<'r> {
-    pub const FIELD_COUNT: usize = 4;
+    pub const FIELD_COUNT: usize = 5;
     pub fn total_size(&self) -> usize {
         molecule::unpack_number(self.as_slice()) as usize
     }
@@ -4163,11 +4172,17 @@ impl<'r> MiscReader<'r> {
     pub fn addr(&self) -> AddressReader<'r> {
         let slice = self.as_slice();
         let start = molecule::unpack_number(&slice[16..]) as usize;
+        let end = molecule::unpack_number(&slice[20..]) as usize;
+        AddressReader::new_unchecked(&self.as_slice()[start..end])
+    }
+    pub fn var_bytes(&self) -> BytesReader<'r> {
+        let slice = self.as_slice();
+        let start = molecule::unpack_number(&slice[20..]) as usize;
         if self.has_extra_fields() {
-            let end = molecule::unpack_number(&slice[20..]) as usize;
-            AddressReader::new_unchecked(&self.as_slice()[start..end])
+            let end = molecule::unpack_number(&slice[24..]) as usize;
+            BytesReader::new_unchecked(&self.as_slice()[start..end])
         } else {
-            AddressReader::new_unchecked(&self.as_slice()[start..])
+            BytesReader::new_unchecked(&self.as_slice()[start..])
         }
     }
 }
@@ -4221,6 +4236,7 @@ impl<'r> molecule::prelude::Reader<'r> for MiscReader<'r> {
         Byte32Reader::verify(&slice[offsets[1]..offsets[2]], compatible)?;
         StringReader::verify(&slice[offsets[2]..offsets[3]], compatible)?;
         AddressReader::verify(&slice[offsets[3]..offsets[4]], compatible)?;
+        BytesReader::verify(&slice[offsets[4]..offsets[5]], compatible)?;
         Ok(())
     }
 }
@@ -4230,9 +4246,10 @@ pub struct MiscBuilder {
     pub(crate) hash: Byte32,
     pub(crate) string: String,
     pub(crate) addr: Address,
+    pub(crate) var_bytes: Bytes,
 }
 impl MiscBuilder {
-    pub const FIELD_COUNT: usize = 4;
+    pub const FIELD_COUNT: usize = 5;
     pub fn integer(mut self, v: Uint64) -> Self {
         self.integer = v;
         self
@@ -4249,6 +4266,10 @@ impl MiscBuilder {
         self.addr = v;
         self
     }
+    pub fn var_bytes(mut self, v: Bytes) -> Self {
+        self.var_bytes = v;
+        self
+    }
 }
 impl molecule::prelude::Builder for MiscBuilder {
     type Entity = Misc;
@@ -4259,6 +4280,7 @@ impl molecule::prelude::Builder for MiscBuilder {
             + self.hash.as_slice().len()
             + self.string.as_slice().len()
             + self.addr.as_slice().len()
+            + self.var_bytes.as_slice().len()
     }
     fn write<W: molecule::io::Write>(&self, writer: &mut W) -> molecule::io::Result<()> {
         let mut total_size = molecule::NUMBER_SIZE * (Self::FIELD_COUNT + 1);
@@ -4271,6 +4293,8 @@ impl molecule::prelude::Builder for MiscBuilder {
         total_size += self.string.as_slice().len();
         offsets.push(total_size);
         total_size += self.addr.as_slice().len();
+        offsets.push(total_size);
+        total_size += self.var_bytes.as_slice().len();
         writer.write_all(&molecule::pack_number(total_size as molecule::Number))?;
         for offset in offsets.into_iter() {
             writer.write_all(&molecule::pack_number(offset as molecule::Number))?;
@@ -4279,6 +4303,7 @@ impl molecule::prelude::Builder for MiscBuilder {
         writer.write_all(self.hash.as_slice())?;
         writer.write_all(self.string.as_slice())?;
         writer.write_all(self.addr.as_slice())?;
+        writer.write_all(self.var_bytes.as_slice())?;
         Ok(())
     }
     fn build(&self) -> Self::Entity {

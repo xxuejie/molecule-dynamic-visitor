@@ -39,11 +39,17 @@ fn main() {
     let hash = random_byte32(&mut rng);
     let string = rand_utf8::rand_utf8(&mut rng, 64);
     let address = random_address(&mut rng);
+    let var_bytes = random_bytes(&mut rng);
 
     println!("Integer: {}", integer);
     println!("Hash: {:#x}", hash);
     println!("String: {}", string);
     println!("Address: {}", to_address(address.clone()));
+    println!(
+        "Varbytes(len = {}): {:#x}",
+        var_bytes.len(),
+        var_bytes.raw_data()
+    );
 
     let packed_integer = {
         let mut data = [Byte::new(0); 8];
@@ -62,6 +68,7 @@ fn main() {
         .hash(hash)
         .string(packed_string)
         .addr(address)
+        .var_bytes(var_bytes)
         .build();
 
     std::fs::write(output_file, combined.as_slice()).expect("write");

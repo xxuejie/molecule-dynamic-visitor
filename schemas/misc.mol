@@ -31,4 +31,5 @@ table Misc {
     hash: Byte32,
     string: String,
     addr: Address,
+    var_bytes: Bytes,
 }
