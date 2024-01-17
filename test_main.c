@@ -124,6 +124,9 @@ int main(int argc, char *argv[]) {
   // then calculates a hash for later signature verification
   blake2b_state state;
   blake2b_init(&state, 32);
+  // A sample prefix is inserted here to mimic real use case
+  const char *PREFIX = "I'm a personal sign message prefix: ";
+  blake2b_update(&state, PREFIX, strlen(PREFIX));
   mcontext.hrp = "ckb";
   mcontext.schema = schema_cursor;
   mcontext.data = data_cursor;
