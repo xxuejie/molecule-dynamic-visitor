@@ -1,0 +1,44 @@
+name: Rust
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        submodules: true
+    - name: Install llvm 16
+      run: wget https://apt.llvm.org/llvm.sh && chmod +x llvm.sh && sudo ./llvm.sh 16 && rm llvm.sh
+    - name: Build generator
+      run: cargo build --verbose
+    - name: Build test binary
+      run: clang-16 -O3 -g -Wall -Werror test_main.c -o test_main
+    - name: Compilation test for riscv target
+      run: clang-16 -O3 -g -Wall -Werror --target=riscv64 -march=rv64imc_zba_zbb_zbc_zbs -c test_rv64.c -o test_rv64.o -I deps/ckb-c-stdlib/libc
+    - name: Prepare Spore schema data
+      run: moleculec --format json --language - --schema-file schemas/spore.mol > spore.json && ./target/debug/molecule-schema-compacter --input-files spore.json --top-level-type SporeAction --output-file spore-schema.data
+    - name: Generate Spore sample data
+      run: ./target/debug/spore-data-generator --output-file spore-data.data
+    - name: Test run
+      run: ./test_main spore-schema.data spore-data.data
+    - name: Prepare Misc schema data
+      run: moleculec --format json --language - --schema-file schemas/misc.mol > misc.json && ./target/debug/molecule-schema-compacter --input-files misc.json --top-level-type Misc --output-file misc-schema.data
+    - name: Generate Spore sample data
+      run: ./target/debug/misc-data-generator --output-file misc-data.data
+    - name: Test run
+      run: ./test_main misc-schema.data misc-data.data
+    - name: Fmt
+      run: clang-format-16 --style=Google -i clib/*.h test_main.c && cargo fmt
+    - name: Diff
+      run: git diff --exit-code
