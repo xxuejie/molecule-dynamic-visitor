@@ -19,7 +19,7 @@ jobs:
       with:
         submodules: true
     - name: Install molecule
-      run: cargo install moleculec
+      run: cargo install moleculec --git https://github.com/nervosnetwork/molecule --rev e996a62b7bbbe8e76c3a2e88db8dc5f79422ce4d
     - name: Install llvm 16
       run: wget https://apt.llvm.org/llvm.sh && chmod +x llvm.sh && sudo ./llvm.sh 16 all && rm llvm.sh
     - name: Reprocess molecule-generated source
