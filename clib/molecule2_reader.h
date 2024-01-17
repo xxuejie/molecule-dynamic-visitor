@@ -1,4 +1,5 @@
-// Copied from https://raw.githubusercontent.com/XuJiandong/moleculec-c2/22384c3009028ce503bdb0e8d9e0abaaaafe3d21/include/molecule2_reader.h
+// Copied from
+// https://raw.githubusercontent.com/XuJiandong/moleculec-c2/22384c3009028ce503bdb0e8d9e0abaaaafe3d21/include/molecule2_reader.h
 
 #ifndef MOLECULE2_READER_H
 #define MOLECULE2_READER_H
@@ -26,7 +27,7 @@ extern "C" {
     mol2_printf("Error at %s: %d\n", __FILE__, __LINE__); \
     MOL2_EXIT(err);                                       \
   } while (0)
-//#define MOL2_PANIC(err) do {printf("Error at %s: %d, %d\n", __FILE__,
+// #define MOL2_PANIC(err) do {printf("Error at %s: %d, %d\n", __FILE__,
 //__LINE__, err); } while(0)
 #endif
 
