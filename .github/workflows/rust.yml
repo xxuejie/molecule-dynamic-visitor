@@ -19,9 +19,11 @@ jobs:
       with:
         submodules: true
     - name: Install molecule
-      run: cargo install moleculec
+      run: cargo install moleculec --git https://github.com/nervosnetwork/molecule --rev e996a62b7bbbe8e76c3a2e88db8dc5f79422ce4d
     - name: Install llvm 16
       run: wget https://apt.llvm.org/llvm.sh && chmod +x llvm.sh && sudo ./llvm.sh 16 all && rm llvm.sh
+    - name: Reprocess molecule-generated source
+      run: moleculec --language rust --schema-file schemas/spore.mol > crates/spore-data-generator/src/schemas/spore.rs && moleculec --language rust --schema-file schemas/misc.mol > crates/misc-data-generator/src/schemas/misc.rs && cargo fmt
     - name: Build generator
       run: cargo build --verbose
     - name: Build test binary
@@ -40,8 +42,6 @@ jobs:
       run: ./target/debug/misc-data-generator --output-file misc-data.data
     - name: Test run on Misc data
       run: ./test_main misc-schema.data misc-data.data
-    - name: Reprocess molecule-generated source
-      run: moleculec --language rust --schema-file schemas/spore.mol > crates/spore-data-generator/src/schemas/spore.rs && moleculec --language rust --schema-file schemas/misc.mol > crates/misc-data-generator/src/schemas/misc.rs
     - name: Fmt
       run: clang-format-16 --style=Google -i clib/*.h test_main.c && cargo fmt
     - name: Diff
